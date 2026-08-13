@@ -1,0 +1,193 @@
+{
+  "name": "🧾 Fluxo 1 — Extração de Faturas",
+  "nodes": [
+    {
+      "parameters": {
+        "driveId": { "__rl": true, "value": "My Drive", "mode": "list" },
+        "folderId": { "__rl": true, "value": "COLE_SEU_FOLDER_ID_AQUI", "mode": "id" },
+        "triggerOn": "fileCreated",
+        "options": {}
+      },
+      "id": "n1",
+      "name": "📂 Google Drive — Novo Arquivo",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.mimeType }}",
+              "operation": "contains",
+              "value2": "image"
+            }
+          ]
+        },
+        "combineOperation": "any"
+      },
+      "id": "n2",
+      "name": "🔍 Filtro — Imagem ou PDF",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "value": "={{ $json.id }}", "mode": "id" },
+        "options": {}
+      },
+      "id": "n3a",
+      "name": "⬇️ Baixar Arquivo (Imagem)",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "value": "={{ $json.id }}", "mode": "id" },
+        "options": {}
+      },
+      "id": "n3b",
+      "name": "⬇️ Baixar Arquivo (PDF)",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item;\nconst binary = item.binary?.data;\nif (!binary) throw new Error('Arquivo binário não encontrado');\n\nconst mimeType = binary.mimeType || 'image/png';\nconst base64 = binary.data;\n\nreturn [{\n  json: {\n    arquivo_base64: base64,\n    mime_type: mimeType,\n    nome_arquivo: binary.fileName || 'arquivo'\n  }\n}];"
+      },
+      "id": "n4",
+      "name": "🔄 Preparar Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/financeiro/extrair-fatura",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Secret", "value": "={{ $env.WEBHOOK_SECRET }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "arquivo_base64", "value": "={{ $json.arquivo_base64 }}" },
+            { "name": "mime_type", "value": "={{ $json.mime_type }}" },
+            { "name": "nome_arquivo", "value": "={{ $json.nome_arquivo }}" }
+          ]
+        },
+        "options": { "timeout": 60000 }
+      },
+      "id": "n5",
+      "name": "🐍 Python — Extração IA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "equals",
+              "value2": "ok"
+            }
+          ]
+        }
+      },
+      "id": "n6",
+      "name": "✅ Extração OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.zapi.io/instances/{{ $env.ZAPI_INSTANCE_ID }}/token/{{ $env.ZAPI_TOKEN }}/send-text",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "phone", "value": "={{ $env.WHATSAPP_ADULTO_1}}" },
+            { "name": "message", "value": "=✅ *Nova fatura processada!*\n\n📋 *Item:* {{ $json.data.item }}\n💰 *Valor:* R$ {{ $json.data.valor }}\n📅 *Vencimento:* {{ $json.data.data_vencimento }}\n{{ $json.data.tem_qr_code ? '📲 QR Code Pix gerado e salvo!' : '' }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n7",
+      "name": "📱 WhatsApp — Notificar Sucesso",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.zapi.io/instances/{{ $env.ZAPI_INSTANCE_ID }}/token/{{ $env.ZAPI_TOKEN }}/send-text",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "phone", "value": "={{ $env.WHATSAPP_ADULTO_1 }}" },
+            { "name": "message", "value": "=⚠️ *Falha ao processar fatura*\n\nArquivo: {{ $node['📂 Google Drive — Novo Arquivo'].json.name }}\nErro: {{ $json.message }}\n\nVerifique o arquivo e tente novamente." }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n8",
+      "name": "📱 WhatsApp — Notificar Erro",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 400]
+    }
+  ],
+  "connections": {
+    "📂 Google Drive — Novo Arquivo": {
+      "main": [[{ "node": "🔍 Filtro — Imagem ou PDF", "type": "main", "index": 0 }]]
+    },
+    "🔍 Filtro — Imagem ou PDF": {
+      "main": [
+        [{ "node": "⬇️ Baixar Arquivo (Imagem)", "type": "main", "index": 0 }],
+        [{ "node": "⬇️ Baixar Arquivo (PDF)", "type": "main", "index": 0 }]
+      ]
+    },
+    "⬇️ Baixar Arquivo (Imagem)": {
+      "main": [[{ "node": "🔄 Preparar Base64", "type": "main", "index": 0 }]]
+    },
+    "⬇️ Baixar Arquivo (PDF)": {
+      "main": [[{ "node": "🔄 Preparar Base64", "type": "main", "index": 0 }]]
+    },
+    "🔄 Preparar Base64": {
+      "main": [[{ "node": "🐍 Python — Extração IA", "type": "main", "index": 0 }]]
+    },
+    "🐍 Python — Extração IA": {
+      "main": [[{ "node": "✅ Extração OK?", "type": "main", "index": 0 }]]
+    },
+    "✅ Extração OK?": {
+      "main": [
+        [{ "node": "📱 WhatsApp — Notificar Sucesso", "type": "main", "index": 0 }],
+        [{ "node": "📱 WhatsApp — Notificar Erro", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "financeiro" }]
+}

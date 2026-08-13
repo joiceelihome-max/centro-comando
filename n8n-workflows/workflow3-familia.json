@@ -1,0 +1,166 @@
+{
+  "name": "👨‍👩‍👧 Fluxo 3 — Briefing Familiar Diário",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 7 * * 1-5" }]
+        }
+      },
+      "id": "n1",
+      "name": "⏰ Cron — Seg a Sex às 07h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/familiar/briefing-diario",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Secret", "value": "={{ $env.WEBHOOK_SECRET }}" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "n2",
+      "name": "🐍 Python — Gerar Briefings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data.mensagens",
+        "options": {}
+      },
+      "id": "n3",
+      "name": "🔀 Split — Um por Membro",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.whatsapp }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "n4",
+      "name": "📱 Tem WhatsApp?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.zapi.io/instances/{{ $env.ZAPI_INSTANCE_ID }}/token/{{ $env.ZAPI_TOKEN }}/send-text",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "phone", "value": "={{ $json.whatsapp }}" },
+            { "name": "message", "value": "={{ $json.mensagem }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n5",
+      "name": "📱 WhatsApp — Enviar Mensagem",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 20 * * *" }]
+        }
+      },
+      "id": "n6",
+      "name": "⏰ Cron — 20h Resumo do Dia",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 520]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BACKEND_URL }}/familiar/ranking",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Secret", "value": "={{ $env.WEBHOOK_SECRET }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n7",
+      "name": "🏆 Buscar Ranking XP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 520]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ranking = $json.data.ranking || [];\nconst linhas = ['🏆 *Ranking Familiar de Hoje!*\\n'];\n\nranking.forEach((m, i) => {\n  const medalha = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';\n  linhas.push(`${medalha} ${m.avatar} *${m.nome}* — ${m.xp} XP — ${m.nivel}`);\n});\n\nlinhas.push('\\n💪 Amanhã é um novo dia de missões!');\n\nreturn [{ json: { mensagem: linhas.join('\\n') } }];"
+      },
+      "id": "n8",
+      "name": "🔄 Montar Mensagem Ranking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 520]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.zapi.io/instances/{{ $env.ZAPI_INSTANCE_ID }}/token/{{ $env.ZAPI_TOKEN }}/send-text",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "phone", "value": "={{ $env.WHATSAPP_ADULTO_1 }}" },
+            { "name": "message", "value": "={{ $json.mensagem }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n9",
+      "name": "📱 WhatsApp — Ranking Noturno",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 520]
+    }
+  ],
+  "connections": {
+    "⏰ Cron — Seg a Sex às 07h": {
+      "main": [[{ "node": "🐍 Python — Gerar Briefings", "type": "main", "index": 0 }]]
+    },
+    "🐍 Python — Gerar Briefings": {
+      "main": [[{ "node": "🔀 Split — Um por Membro", "type": "main", "index": 0 }]]
+    },
+    "🔀 Split — Um por Membro": {
+      "main": [[{ "node": "📱 Tem WhatsApp?", "type": "main", "index": 0 }]]
+    },
+    "📱 Tem WhatsApp?": {
+      "main": [[{ "node": "📱 WhatsApp — Enviar Mensagem", "type": "main", "index": 0 }], []]
+    },
+    "⏰ Cron — 20h Resumo do Dia": {
+      "main": [[{ "node": "🏆 Buscar Ranking XP", "type": "main", "index": 0 }]]
+    },
+    "🏆 Buscar Ranking XP": {
+      "main": [[{ "node": "🔄 Montar Mensagem Ranking", "type": "main", "index": 0 }]]
+    },
+    "🔄 Montar Mensagem Ranking": {
+      "main": [[{ "node": "📱 WhatsApp — Ranking Noturno", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "familiar" }]
+}

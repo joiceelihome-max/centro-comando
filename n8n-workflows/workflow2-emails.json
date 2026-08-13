@@ -1,0 +1,159 @@
+{
+  "name": "📧 Fluxo 2 — Resumo Executivo de E-mails",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute", "minute": 5 }] },
+        "filters": {
+          "readStatus": "unread",
+          "labels": []
+        },
+        "options": { "dataPropertyAttachmentsPrefixName": "attachment" }
+      },
+      "id": "n1",
+      "name": "📬 Gmail — Novos E-mails",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const from = $json.from || '';\nconst subject = $json.subject || '';\n\n// Remetentes e assuntos que NUNCA precisam de análise\nconst ignorar = [\n  'noreply', 'no-reply', 'newsletter', 'marketing',\n  'unsubscribe', 'promocao', 'promoção', 'oferta'\n];\n\nconst deveIgnorar = ignorar.some(p => \n  from.toLowerCase().includes(p) || \n  subject.toLowerCase().includes(p)\n);\n\nif (deveIgnorar) return [];\n\n// Passa o e-mail para o próximo nó\nreturn [{ json: $json }];"
+      },
+      "id": "n2",
+      "name": "🔍 Filtrar Spam/Newsletter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BACKEND_URL }}/administrativo/processar-email",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Secret", "value": "={{ $env.WEBHOOK_SECRET }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "assunto", "value": "={{ $json.subject }}" },
+            { "name": "remetente", "value": "={{ $json.from }}" },
+            { "name": "corpo", "value": "={{ $json.text || $json.snippet }}" },
+            { "name": "data_recebimento", "value": "={{ $now.format('YYYY-MM-DD HH:mm') }}" }
+          ]
+        },
+        "options": { "timeout": 45000 }
+      },
+      "id": "n3",
+      "name": "🐍 Python — Resumo IA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.data.urgencia }}",
+              "operation": "regex",
+              "value2": "Crítica|Alta"
+            }
+          ]
+        }
+      },
+      "id": "n4",
+      "name": "🚨 É Urgente?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.zapi.io/instances/{{ $env.ZAPI_INSTANCE_ID }}/token/{{ $env.ZAPI_TOKEN }}/send-text",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "phone", "value": "={{ $env.WHATSAPP_ADULTO_1 }}" },
+            { "name": "message", "value": "={{ $json.data.urgencia === 'Crítica' ? '🔴' : '🟠' }} *E-mail {{ $json.data.urgencia.toUpperCase() }}*\n\n📧 *De:* {{ $node['📬 Gmail — Novos E-mails'].json.from }}\n📋 *Resumo:* {{ $json.data.resumo }}\n📅 *Prazo:* {{ $json.data.prazo || 'Não identificado' }}\n💰 *Valor:* {{ $json.data.valor ? 'R$ ' + $json.data.valor : 'N/A' }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n5",
+      "name": "📱 WhatsApp — Alerta Urgente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.data.compromisso_criado }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "n6",
+      "name": "📅 Compromisso Criado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.zapi.io/instances/{{ $env.ZAPI_INSTANCE_ID }}/token/{{ $env.ZAPI_TOKEN }}/send-text",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "phone", "value": "={{ $env.WHATSAPP_ADULTO_1 }}" },
+            { "name": "message", "value": "=📅 *Novo compromisso adicionado!*\n\n📋 {{ $json.data.resumo }}\n🗓️ Data: {{ $json.data.prazo }}\n\n_Adicionado automaticamente à sua agenda._" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n7",
+      "name": "📱 WhatsApp — Confirmar Agenda",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 360]
+    }
+  ],
+  "connections": {
+    "📬 Gmail — Novos E-mails": {
+      "main": [[{ "node": "🔍 Filtrar Spam/Newsletter", "type": "main", "index": 0 }]]
+    },
+    "🔍 Filtrar Spam/Newsletter": {
+      "main": [[{ "node": "🐍 Python — Resumo IA", "type": "main", "index": 0 }]]
+    },
+    "🐍 Python — Resumo IA": {
+      "main": [[{ "node": "🚨 É Urgente?", "type": "main", "index": 0 }]]
+    },
+    "🚨 É Urgente?": {
+      "main": [
+        [{ "node": "📱 WhatsApp — Alerta Urgente", "type": "main", "index": 0 }],
+        [{ "node": "📅 Compromisso Criado?", "type": "main", "index": 0 }]
+      ]
+    },
+    "📱 WhatsApp — Alerta Urgente": {
+      "main": [[{ "node": "📅 Compromisso Criado?", "type": "main", "index": 0 }]]
+    },
+    "📅 Compromisso Criado?": {
+      "main": [
+        [{ "node": "📱 WhatsApp — Confirmar Agenda", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "administrativo" }]
+}

@@ -1,0 +1,47 @@
+# ============================================================
+# CENTRO DE COMANDO FAMILIAR & EMPRESARIAL — .cursorrules
+# IA do Cursor lê isso antes de cada resposta
+# ============================================================
+
+## STACK
+- Backend: Python 3.12 + Flask 3.x
+- Banco: Airtable (pyairtable 2.x)
+- Automações: n8n self-hosted (Railway)
+- IA: Anthropic Claude (claude-opus-4-5)
+- WhatsApp: Z-API
+- Deploy: Railway via Dockerfile
+
+## CONVENÇÕES
+- Type hints obrigatórios em todas as funções
+- Retorno das rotas: {"status":"ok"|"error","message":"...","data":{}}
+- Datas: sempre YYYY-MM-DD ou YYYY-MM-DD HH:MM
+- Logs: logging.getLogger(__name__), nunca print()
+- Env vars: os.environ.get("NOME") — nunca hardcode
+- Blueprint Flask por módulo (financeiro, administrativo, familiar)
+
+## TABELAS AIRTABLE (nomes exatos)
+- Faturas_Recibos, Emails_Notificacoes, Compromissos
+- Membros_Familia, Tarefas_Familiares, Agenda_Escolar
+
+## CAMPOS CRÍTICOS (não altere os nomes)
+Faturas_Recibos: Item_Descricao, Valor, Data_Vencimento,
+  Codigo_Pix_Bruto, QR_Code_URL, Categoria, Status_Pagamento, IA_Status
+Emails_Notificacoes: Resumo_Executivo, Prazo_Identificado,
+  Urgencia, Tipo, Status_Acao, Sincronizado_Calendario
+Membros_Familia: Pontos_XP, Nivel, Avatar_Emoji, Email_Whatsapp
+Tarefas_Familiares: Emoji_Icone, Pontos_Recompensa, Recorrencia
+
+## MÓDULOS
+- modules/financeiro.py  → Blueprint /financeiro
+- modules/administrativo.py → Blueprint /administrativo
+- modules/familiar.py    → Blueprint /familiar
+- config.py              → get_table(), requer_auth(), resposta(), erro()
+- scripts/setup_airtable.py → rode uma vez para criar tabelas
+
+## N8N — VARIÁVEIS DE AMBIENTE DOS WORKFLOWS
+Os workflows usam: $env.BACKEND_URL, $env.WEBHOOK_SECRET,
+  $env.ZAPI_URL, $env.ZAPI_TOKEN, $env.WHATSAPP_ADULTO_1
+
+## SEGURANÇA
+- Header X-Webhook-Secret obrigatório em todas as rotas
+- Decorator @requer_auth em todos os endpoints

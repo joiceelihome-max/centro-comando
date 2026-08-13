@@ -1,0 +1,155 @@
+{
+  "name": "⚠️ Fluxo 4 — Alertas de Vencimento 48h",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 9 * * *" }]
+        }
+      },
+      "id": "n1",
+      "name": "⏰ Cron — Todo Dia 09h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BACKEND_URL }}/financeiro/fluxo-de-caixa",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Secret", "value": "={{ $env.WEBHOOK_SECRET }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "mes", "value": "={{ $now.format('YYYY-MM') }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n2",
+      "name": "💰 Buscar Faturas do Mês",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json.data || {};\nconst vencimentos = data.proximos_vencimentos || [];\n\n// Filtra apenas os que vencem em até 48h\nconst hoje = new Date();\nconst limite48h = new Date(hoje.getTime() + 48 * 60 * 60 * 1000);\n\nconst urgentes = vencimentos.filter(f => {\n  if (!f.vencimento) return false;\n  const dtVenc = new Date(f.vencimento);\n  return dtVenc <= limite48h && dtVenc >= hoje;\n});\n\nif (urgentes.length === 0) return [];\n\nreturn urgentes.map(f => ({ json: f }));"
+      },
+      "id": "n3",
+      "name": "🔍 Filtrar Vencendo em 48h",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.zapi.io/instances/{{ $env.ZAPI_INSTANCE_ID }}/token/{{ $env.ZAPI_TOKEN }}/send-text",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "phone", "value": "={{ $env.WHATSAPP_ADULTO_1 }}" },
+            { "name": "message", "value": "=⚠️ *Fatura vencendo em breve!*\n\n📋 {{ $json.item }}\n💰 Valor: *R$ {{ Number($json.valor).toFixed(2) }}*\n📅 Vencimento: *{{ $json.vencimento }}*\n\n_Acesse o app para pagar com QR Code Pix._" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n4",
+      "name": "📱 WhatsApp — Alerta Fatura",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 9 * * 1" }]
+        }
+      },
+      "id": "n5",
+      "name": "⏰ Cron — Segunda 09h (Prazos Semana)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 520]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.BACKEND_URL }}/administrativo/prazos-proximos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Secret", "value": "={{ $env.WEBHOOK_SECRET }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "dias", "value": "7" }]
+        },
+        "options": {}
+      },
+      "id": "n6",
+      "name": "📧 Buscar Prazos da Semana",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 520]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prazos = $json.data.prazos || [];\nif (prazos.length === 0) return [];\n\nconst linhas = ['📋 *Prazos desta semana:*\\n'];\nprazos.forEach(p => {\n  const emoji = p.urgencia === 'Crítica' ? '🔴' : p.urgencia === 'Alta' ? '🟠' : '🟡';\n  linhas.push(`${emoji} *${p.prazo}* — ${p.assunto.substring(0, 50)}`);\n  if (p.valor) linhas.push(`   💰 R$ ${Number(p.valor).toFixed(2)}`);\n});\n\nreturn [{ json: { mensagem: linhas.join('\\n'), total: prazos.length } }];"
+      },
+      "id": "n7",
+      "name": "🔄 Montar Resumo Semanal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 520]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.zapi.io/instances/{{ $env.ZAPI_INSTANCE_ID }}/token/{{ $env.ZAPI_TOKEN }}/send-text",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "phone", "value": "={{ $env.WHATSAPP_ADULTO_1 }}" },
+            { "name": "message", "value": "={{ $json.mensagem }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n8",
+      "name": "📱 WhatsApp — Resumo Semanal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 520]
+    }
+  ],
+  "connections": {
+    "⏰ Cron — Todo Dia 09h": {
+      "main": [[{ "node": "💰 Buscar Faturas do Mês", "type": "main", "index": 0 }]]
+    },
+    "💰 Buscar Faturas do Mês": {
+      "main": [[{ "node": "🔍 Filtrar Vencendo em 48h", "type": "main", "index": 0 }]]
+    },
+    "🔍 Filtrar Vencendo em 48h": {
+      "main": [[{ "node": "📱 WhatsApp — Alerta Fatura", "type": "main", "index": 0 }]]
+    },
+    "⏰ Cron — Segunda 09h (Prazos Semana)": {
+      "main": [[{ "node": "📧 Buscar Prazos da Semana", "type": "main", "index": 0 }]]
+    },
+    "📧 Buscar Prazos da Semana": {
+      "main": [[{ "node": "🔄 Montar Resumo Semanal", "type": "main", "index": 0 }]]
+    },
+    "🔄 Montar Resumo Semanal": {
+      "main": [[{ "node": "📱 WhatsApp — Resumo Semanal", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "alertas" }]
+}
