@@ -9,12 +9,14 @@ load_dotenv()
 from modules.financeiro      import bp as financeiro_bp
 from modules.administrativo  import bp as administrativo_bp
 from modules.familiar        import bp as familiar_bp
+from modules.dashboard       import bp as dashboard_bp
 
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
 app.register_blueprint(financeiro_bp)
 app.register_blueprint(administrativo_bp)
 app.register_blueprint(familiar_bp)
+app.register_blueprint(dashboard_bp)
 
 @app.route("/health")
 def health():
