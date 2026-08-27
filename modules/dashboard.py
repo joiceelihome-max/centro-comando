@@ -28,7 +28,7 @@ def resumo():
     mes_str = hoje.strftime("%Y-%m")
 
     # --- Financeiro ---
-    faturas = get_table("Faturas_Recibos").all()
+    faturas = get_table("tbl3hNukwEUGHYzek").all()
     pendentes = [r for r in faturas if r["fields"].get("Status_Pagamento") == "Pendente"]
     pagos = [r for r in faturas if r["fields"].get("Status_Pagamento") == "Pago"]
     total_pendente = round(sum(r["fields"].get("Valor", 0) for r in pendentes), 2)
@@ -47,7 +47,7 @@ def resumo():
     ]
 
     # --- Administrativo ---
-    compromissos_raw = get_table("Compromissos").all(
+    compromissos_raw = get_table("tblqgdiF2nmZCEOkd").all(
         formula=f"AND(FIND('{hoje_str}',{{Data_Hora_Inicio}})>0,{{Status}}!='Cancelado')",
         sort=["Data_Hora_Inicio"],
     )
@@ -62,7 +62,7 @@ def resumo():
     ]
 
     limite = (hoje + timedelta(days=7)).strftime("%Y-%m-%d")
-    emails_urg = get_table("Emails_Notificacoes").all(
+    emails_urg = get_table("tblUF8IrwUquzDPbE").all(
         formula=f"AND({{Prazo_Identificado}}>='{hoje_str}',{{Prazo_Identificado}}<='{limite}',{{Status_Acao}}!='Resolvido')",
         sort=["Prazo_Identificado"],
     )
@@ -78,7 +78,7 @@ def resumo():
     total_emails_criticos = len([e for e in emails_urg if e["fields"].get("Urgencia") == "Crítica"])
 
     # --- Família ---
-    membros = get_table("Membros_Familia").all(sort=["-Pontos_XP"])
+    membros = get_table("tblA61UUR30edIm0U").all(sort=["-Pontos_XP"])
     ranking = [
         {
             "posicao": i + 1,
@@ -90,7 +90,7 @@ def resumo():
         for i, r in enumerate(membros)
     ]
 
-    tarefas_raw = get_table("Tarefas_Familiares").all(formula="{Status}!='Concluída'")
+    tarefas_raw = get_table("tblYbcS30saklJ1GC").all(formula="{Status}!='Concluída'")
     tarefas_semana = [
         {
             "titulo": r["fields"].get("Titulo_Tarefa"),
@@ -103,7 +103,7 @@ def resumo():
     ]
 
     limite_escola = (hoje + timedelta(days=14)).strftime("%Y-%m-%d")
-    agenda_raw = get_table("Agenda_Escolar").all(
+    agenda_raw = get_table("tbltAiRgILnqs8Ofj").all(
         formula=f"AND({{Data_Prazo}}>='{hoje_str}',{{Data_Prazo}}<='{limite_escola}',{{Status}}!='Concluído')",
         sort=["Data_Prazo"],
     )
