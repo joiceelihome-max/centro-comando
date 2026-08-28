@@ -75,7 +75,40 @@ def resumo():
         }
         for r in emails_urg
     ]
-    total_emails_criticos = len([e for e in emails_urg if e["fields"].get("Urgencia") == "Crítica"])
+    total_emails_criticos = len([e for e in emails_urg if "Crítica" in (e["fields"].get("Urgencia") or "")])
+
+    resumos_executivos = [
+        {
+            "assunto": r["fields"].get("Assunto_Original"),
+            "remetente": r["fields"].get("Remetente"),
+            "resumo": r["fields"].get("Resumo_Executivo"),
+            "prazo": r["fields"].get("Prazo_Identificado"),
+            "valor": r["fields"].get("Valor_Envolvido"),
+            "urgencia": r["fields"].get("Urgencia"),
+            "tipo": r["fields"].get("Tipo"),
+        }
+        for r in emails_urg[:5]
+    ]
+
+    # --- Fluxo de caixa mensal (últimos 6 meses) ---
+    fluxo_raw = get_table("tblXAlID5B15zt91g").all(sort=["Mês_Referência"])
+    fluxo_mensal = [
+        {
+            "mes": r["fields"].get("Mês_Referência"),
+            "total_pago": r["fields"].get("Total_Pago", 0),
+            "total_pendente": r["fields"].get("Total_Pendente", 0),
+            "saldo": r["fields"].get("Saldo_Estimado", 0),
+        }
+        for r in fluxo_raw
+    ][-6:]
+
+    # --- Gastos por categoria (mês atual) ---
+    gastos_mes = [r for r in faturas if (r["fields"].get("Mes_Referencia") or "") == mes_str]
+    por_categoria = {}
+    for r in gastos_mes:
+        cat = r["fields"].get("Categoria") or "Outros"
+        por_categoria[cat] = round(por_categoria.get(cat, 0) + (r["fields"].get("Valor") or 0), 2)
+    por_categoria_lista = [{"categoria": k, "valor": v} for k, v in sorted(por_categoria.items(), key=lambda x: -x[1])]
 
     # --- Família ---
     membros = get_table("tblA61UUR30edIm0U").all(sort=["-Pontos_XP"])
@@ -127,11 +160,14 @@ def resumo():
             "total_pendente": total_pendente,
             "total_pago": total_pago,
             "proximos_vencimentos": proximos_vencimentos,
+            "fluxo_mensal": fluxo_mensal,
+            "por_categoria": por_categoria_lista,
         },
         "administrativo": {
             "compromissos_hoje": compromissos_hoje,
             "prazos_proximos": prazos_proximos,
             "total_emails_criticos": total_emails_criticos,
+            "resumos_executivos": resumos_executivos,
         },
         "familia": {
             "ranking": ranking,
